@@ -39,6 +39,34 @@ def build_sort(sort_by: SortBy, sort_order: SortOrder) -> list[tuple[str, int]]:
     return [("ranking.rating", 1), ("placeName", 1)]
 
 
+def build_bounds_geometry(*, north: float, south: float, east: float, west: float) -> dict[str, Any]:
+    return {
+        "geometry": {
+            "$geoWithin": {
+                "$geometry": {
+                    "type": "Polygon",
+                    "coordinates": [
+                        [
+                            [west, south],
+                            [east, south],
+                            [east, north],
+                            [west, north],
+                            [west, south],
+                        ]
+                    ],
+                }
+            }
+        }
+    }
+
+
+def merge_query(*parts: dict[str, Any]) -> dict[str, Any]:
+    query: dict[str, Any] = {}
+    for part in parts:
+        query.update(part)
+    return query
+
+
 def serialize_place(document: dict[str, Any]) -> Place:
     payload = {key: value for key, value in document.items() if key != "_id"}
     return Place.model_validate(payload)

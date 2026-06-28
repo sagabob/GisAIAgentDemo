@@ -43,6 +43,33 @@ class PlaceListResponse(BaseModel):
     items: list[Place]
 
 
+class PlaceSpatialItem(Place):
+    distanceMeters: float | None = None
+
+
+class PlaceNearbyResponse(BaseModel):
+    total: int
+    skip: int
+    limit: int
+    lat: float
+    lng: float
+    radiusMeters: float
+    items: list[PlaceSpatialItem]
+
+
+class PlaceBoundsResponse(BaseModel):
+    total: int
+    skip: int
+    limit: int
+    sortBy: str
+    sortOrder: str
+    north: float
+    south: float
+    east: float
+    west: float
+    items: list[Place]
+
+
 class CategoryListResponse(BaseModel):
     items: list[str]
 
