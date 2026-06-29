@@ -193,7 +193,7 @@ OpenAPI docs: http://127.0.0.1:8000/docs
 
 ```powershell
 cd GisApi
-pip install -r requirements.txt
+pip install -r requirements-dev.txt
 pytest
 ```
 
