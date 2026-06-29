@@ -1,0 +1,114 @@
+<div class="portal">
+  <div class="portal-body">
+    <section class="map-panel">
+      <div #mapContainer class="map-container"></div>
+
+      <div class="search-overlay">
+        <input
+          id="name-search"
+          type="search"
+          [ngModel]="searchQuery"
+          (ngModelChange)="onSearchInput($event)"
+          name="searchQuery"
+          placeholder="Search place name (min 3 characters)"
+          autocomplete="off"
+        />
+        <span class="search-status">
+          @if (searchLoading()) {
+            Searching...
+          } @else if (resultCount() > 0) {
+            {{ resultCount() }} results
+          } @else {
+            Type to search
+          }
+        </span>
+        @if (searchError()) {
+          <p class="error">{{ searchError() }}</p>
+        }
+      </div>
+    </section>
+
+    <aside class="ai-panel">
+      <div class="ai-panel-header">
+        <div>
+          <h2>Intelligent search</h2>
+          <p>Ask natural language questions about Christchurch places.</p>
+        </div>
+        <button type="button" class="secondary" (click)="resetChat()">Reset</button>
+      </div>
+
+      <div class="chat-log">
+        @if (chatMessages().length === 0) {
+          <div class="chat-empty">
+            <p>Try questions like:</p>
+            <ul>
+              <li>Find parks in Sumner</li>
+              <li>Show hospitals near the CBD</li>
+              <li>What schools are in Riccarton?</li>
+            </ul>
+          </div>
+        }
+
+        @for (message of chatMessages(); track message.content + message.role) {
+          <article class="chat-message" [class.user]="message.role === 'user'">
+            <span class="chat-role">{{ message.role === 'user' ? 'You' : 'Agent' }}</span>
+            @if (message.role === 'user') {
+              <p>{{ message.content }}</p>
+            } @else if (message.places?.length) {
+              <p class="places-summary">{{ placesSummary(message.places!, message.total) }}</p>
+              <ul class="place-results">
+                @for (place of message.places; track place.placeNameId) {
+                  <li>
+                    <button
+                      type="button"
+                      class="place-result"
+                      [class.selected]="isSelectedPlace(place)"
+                      (click)="selectPlaceFromMessage(place, message.places!)"
+                    >
+                      <span class="place-result-name">{{ place.placeName }}</span>
+                      <span class="place-result-meta">
+                        @if (place.locality) {
+                          <span>{{ place.locality }}</span>
+                        }
+                        @if (place.ranking?.rating != null) {
+                          <span>{{ place.locality ? ' · ' : '' }}Rating {{ place.ranking?.rating }}</span>
+                        }
+                      </span>
+                    </button>
+                  </li>
+                }
+              </ul>
+            } @else {
+              <p [innerHTML]="formatMessage(message.content)"></p>
+            }
+          </article>
+        }
+
+        @if (aiLoading()) {
+          <article class="chat-message">
+            <span class="chat-role">Agent</span>
+            <p>Thinking...</p>
+          </article>
+        }
+      </div>
+
+      <form class="ai-form" (ngSubmit)="$event.preventDefault()">
+        <label for="ai-search">Ask in English</label>
+        <textarea
+          id="ai-search"
+          rows="3"
+          [(ngModel)]="aiQuery"
+          name="aiQuery"
+          placeholder="e.g. List the top rated beaches in Christchurch (press Enter)"
+          (keydown)="onAiKeydown($event)"
+        ></textarea>
+        @if (aiError()) {
+          <p class="error">{{ aiError() }}</p>
+        }
+        @if (aiLoading()) {
+          <p class="search-status">Working...</p>
+        }
+      </form>
+    </aside>
+  </div>
+</div>

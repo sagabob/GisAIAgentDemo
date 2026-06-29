@@ -1,0 +1,8 @@
+{
+  "gisApiUrl": "/api",
+  "agentApiUrl": "/agent",
+  "mapCenter": { "lat": -43.532, "lng": 172.636 },
+  "defaultZoom": 12,
+  "searchMinLength": 3,
+  "searchDebounceMs": 350
+}
