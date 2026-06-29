@@ -1,18 +1,20 @@
 from typing import Any
 
+from motor.motor_asyncio import AsyncIOMotorCollection
 from pymongo import ReturnDocument
+from pymongo.errors import DuplicateKeyError
 
-from app.config import get_poi_collection_name
-from app.database import get_collection
 from app.enums import SortBy, SortOrder
-from app.models import (
+from app.queries import build_filters, build_sort
+from app.schemas.poi import (
     PointOfInterest,
     PointOfInterestCreate,
     PointOfInterestListResponse,
     PointOfInterestReplace,
     PointOfInterestUpdate,
 )
-from app.queries import build_filters, build_sort
+
+_MAX_ID_RETRIES = 3
 
 
 def _serialize_poi(document: dict[str, Any]) -> PointOfInterest:
@@ -21,11 +23,11 @@ def _serialize_poi(document: dict[str, Any]) -> PointOfInterest:
 
 
 class PointOfInterestRepository:
-    def _collection(self):
-        return get_collection(get_poi_collection_name())
+    def __init__(self, collection: AsyncIOMotorCollection) -> None:
+        self._collection = collection
 
     async def _next_place_name_id(self) -> int:
-        document = await self._collection().find_one(
+        document = await self._collection.find_one(
             {},
             sort=[("placeNameId", -1)],
             projection={"placeNameId": 1},
@@ -44,7 +46,6 @@ class PointOfInterestRepository:
         skip: int,
         limit: int,
     ) -> PointOfInterestListResponse:
-        collection = self._collection()
         query = build_filters(
             name=name,
             category=category,
@@ -53,8 +54,8 @@ class PointOfInterestRepository:
         )
         sort = build_sort(sort_by, sort_order)
 
-        total = await collection.count_documents(query)
-        cursor = collection.find(query, {"_id": 0}).sort(sort).skip(skip).limit(limit)
+        total = await self._collection.count_documents(query)
+        cursor = self._collection.find(query, {"_id": 0}).sort(sort).skip(skip).limit(limit)
         documents = await cursor.to_list(length=limit)
         items = [_serialize_poi(document) for document in documents]
 
@@ -68,7 +69,7 @@ class PointOfInterestRepository:
         )
 
     async def get_by_id(self, place_name_id: int) -> PointOfInterest | None:
-        document = await self._collection().find_one(
+        document = await self._collection.find_one(
             {"placeNameId": place_name_id},
             {"_id": 0},
         )
@@ -77,13 +78,27 @@ class PointOfInterestRepository:
         return _serialize_poi(document)
 
     async def create(self, payload: PointOfInterestCreate) -> PointOfInterest:
-        collection = self._collection()
-        place_name_id = payload.placeNameId
-        if place_name_id is None:
-            place_name_id = await self._next_place_name_id()
-        elif await collection.find_one({"placeNameId": place_name_id}, {"_id": 1}):
-            raise ValueError(f"placeNameId {place_name_id} already exists")
+        if payload.placeNameId is not None:
+            if await self._collection.find_one({"placeNameId": payload.placeNameId}, {"_id": 1}):
+                raise ValueError(f"placeNameId {payload.placeNameId} already exists")
+            return await self._insert_document(payload.placeNameId, payload)
 
+        last_error: DuplicateKeyError | None = None
+        for _ in range(_MAX_ID_RETRIES):
+            place_name_id = await self._next_place_name_id()
+            try:
+                return await self._insert_document(place_name_id, payload)
+            except DuplicateKeyError as exc:
+                last_error = exc
+                continue
+
+        raise ValueError("Could not allocate a unique placeNameId") from last_error
+
+    async def _insert_document(
+        self,
+        place_name_id: int,
+        payload: PointOfInterestCreate,
+    ) -> PointOfInterest:
         document = {
             "placeNameId": place_name_id,
             "placeName": payload.placeName,
@@ -91,7 +106,7 @@ class PointOfInterestRepository:
             "geometry": payload.geometry.model_dump(),
             "category": payload.category,
         }
-        await collection.insert_one(document)
+        await self._collection.insert_one(document)
         return _serialize_poi(document)
 
     async def replace(self, place_name_id: int, payload: PointOfInterestReplace) -> PointOfInterest | None:
@@ -102,7 +117,7 @@ class PointOfInterestRepository:
             "geometry": payload.geometry.model_dump(),
             "category": payload.category,
         }
-        result = await self._collection().replace_one({"placeNameId": place_name_id}, document)
+        result = await self._collection.replace_one({"placeNameId": place_name_id}, document)
         if result.matched_count == 0:
             return None
         return _serialize_poi(document)
@@ -115,7 +130,7 @@ class PointOfInterestRepository:
         if not updates:
             return await self.get_by_id(place_name_id)
 
-        result = await self._collection().find_one_and_update(
+        result = await self._collection.find_one_and_update(
             {"placeNameId": place_name_id},
             {"$set": updates},
             projection={"_id": 0},
@@ -126,12 +141,9 @@ class PointOfInterestRepository:
         return _serialize_poi(result)
 
     async def delete(self, place_name_id: int) -> bool:
-        result = await self._collection().delete_one({"placeNameId": place_name_id})
+        result = await self._collection.delete_one({"placeNameId": place_name_id})
         return result.deleted_count > 0
 
     async def list_categories(self) -> list[str]:
-        categories = await self._collection().distinct("category")
+        categories = await self._collection.distinct("category")
         return sorted(category for category in categories if category)
-
-
-poi_repository = PointOfInterestRepository()

@@ -1,110 +1,131 @@
-from fastapi import APIRouter, HTTPException, Query, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 
-from app.enums import SortBy, SortOrder
-from app.models import (
-    CategoryListResponse,
+from app.dependencies import (
+    NameSearchParams,
+    PaginationParams,
+    SortParams,
+    TextSearchFilters,
+    get_poi_repository,
+    name_search_params,
+    pagination_params,
+    sort_params,
+    text_search_filters,
+)
+from app.repositories.pointofinterest import PointOfInterestRepository
+from app.schemas.place import CategoryListResponse
+from app.schemas.poi import (
     PointOfInterest,
     PointOfInterestCreate,
     PointOfInterestListResponse,
     PointOfInterestReplace,
     PointOfInterestUpdate,
 )
-from app.repositories.pointofinterest import poi_repository
 
 router = APIRouter(prefix="/point-of-interest", tags=["point-of-interest"])
 
 
-@router.get("", response_model=PointOfInterestListResponse)
+@router.get("", response_model=PointOfInterestListResponse, summary="List points of interest")
 async def list_point_of_interest(
-    name: str | None = Query(default=None, description="Search by place name (partial match)"),
-    category: str | None = Query(default=None, description="Filter by category"),
-    locality: str | None = Query(default=None, description="Filter by locality"),
-    sort_by: SortBy = Query(default=SortBy.name, description="Sort by place name or Google rating"),
-    sort_order: SortOrder = Query(default=SortOrder.asc, description="Ascending or descending order"),
-    skip: int = Query(default=0, ge=0),
-    limit: int = Query(default=20, ge=1, le=100),
+    filters: TextSearchFilters = Depends(text_search_filters),
+    sorting: SortParams = Depends(sort_params),
+    pagination: PaginationParams = Depends(pagination_params),
+    repository: PointOfInterestRepository = Depends(get_poi_repository),
 ) -> PointOfInterestListResponse:
-    return await poi_repository.search(
-        name=name,
-        category=category,
-        locality=locality,
-        sort_by=sort_by,
-        sort_order=sort_order,
-        skip=skip,
-        limit=limit,
+    return await repository.search(
+        name=filters.name,
+        category=filters.category,
+        locality=filters.locality,
+        sort_by=sorting.sort_by,
+        sort_order=sorting.sort_order,
+        skip=pagination.skip,
+        limit=pagination.limit,
     )
 
 
-@router.get("/categories", response_model=CategoryListResponse)
-async def list_categories() -> CategoryListResponse:
-    items = await poi_repository.list_categories()
+@router.get("/categories", response_model=CategoryListResponse, summary="List POI categories")
+async def list_categories(
+    repository: PointOfInterestRepository = Depends(get_poi_repository),
+) -> CategoryListResponse:
+    items = await repository.list_categories()
     return CategoryListResponse(items=items)
 
 
-@router.get("/by-name", response_model=PointOfInterestListResponse)
+@router.get("/by-name", response_model=PointOfInterestListResponse, summary="Search POI by name")
 async def search_by_name(
-    place_name: str = Query(..., min_length=1, description="Search by place name"),
-    exact: bool = Query(default=False, description="Exact name match when true, partial match when false"),
-    locality: str | None = Query(default=None, description="Filter by locality"),
-    category: str | None = Query(default=None, description="Filter by category"),
-    sort_by: SortBy = Query(default=SortBy.name, description="Sort by place name or Google rating"),
-    sort_order: SortOrder = Query(default=SortOrder.asc, description="Ascending or descending order"),
-    skip: int = Query(default=0, ge=0),
-    limit: int = Query(default=20, ge=1, le=100),
+    params: NameSearchParams = Depends(name_search_params),
+    sorting: SortParams = Depends(sort_params),
+    pagination: PaginationParams = Depends(pagination_params),
+    repository: PointOfInterestRepository = Depends(get_poi_repository),
 ) -> PointOfInterestListResponse:
-    return await poi_repository.search(
-        name=place_name,
-        category=category,
-        locality=locality,
-        exact_name=exact,
-        sort_by=sort_by,
-        sort_order=sort_order,
-        skip=skip,
-        limit=limit,
+    return await repository.search(
+        name=params.place_name,
+        category=params.category,
+        locality=params.locality,
+        exact_name=params.exact,
+        sort_by=sorting.sort_by,
+        sort_order=sorting.sort_order,
+        skip=pagination.skip,
+        limit=pagination.limit,
     )
 
 
-@router.get("/{place_name_id}", response_model=PointOfInterest)
-async def get_point_of_interest(place_name_id: int) -> PointOfInterest:
-    poi = await poi_repository.get_by_id(place_name_id)
+@router.get("/{place_name_id}", response_model=PointOfInterest, summary="Get POI by ID")
+async def get_point_of_interest(
+    place_name_id: int,
+    repository: PointOfInterestRepository = Depends(get_poi_repository),
+) -> PointOfInterest:
+    poi = await repository.get_by_id(place_name_id)
     if not poi:
         raise HTTPException(status_code=404, detail="Point of interest not found")
     return poi
 
 
-@router.post("", response_model=PointOfInterest, status_code=status.HTTP_201_CREATED)
-async def create_point_of_interest(payload: PointOfInterestCreate) -> PointOfInterest:
+@router.post(
+    "",
+    response_model=PointOfInterest,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create a point of interest",
+)
+async def create_point_of_interest(
+    payload: PointOfInterestCreate,
+    repository: PointOfInterestRepository = Depends(get_poi_repository),
+) -> PointOfInterest:
     try:
-        return await poi_repository.create(payload)
+        return await repository.create(payload)
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
-@router.put("/{place_name_id}", response_model=PointOfInterest)
+@router.put("/{place_name_id}", response_model=PointOfInterest, summary="Replace a point of interest")
 async def replace_point_of_interest(
     place_name_id: int,
     payload: PointOfInterestReplace,
+    repository: PointOfInterestRepository = Depends(get_poi_repository),
 ) -> PointOfInterest:
-    poi = await poi_repository.replace(place_name_id, payload)
+    poi = await repository.replace(place_name_id, payload)
     if not poi:
         raise HTTPException(status_code=404, detail="Point of interest not found")
     return poi
 
 
-@router.patch("/{place_name_id}", response_model=PointOfInterest)
+@router.patch("/{place_name_id}", response_model=PointOfInterest, summary="Update a point of interest")
 async def update_point_of_interest(
     place_name_id: int,
     payload: PointOfInterestUpdate,
+    repository: PointOfInterestRepository = Depends(get_poi_repository),
 ) -> PointOfInterest:
-    poi = await poi_repository.update(place_name_id, payload)
+    poi = await repository.update(place_name_id, payload)
     if not poi:
         raise HTTPException(status_code=404, detail="Point of interest not found")
     return poi
 
 
-@router.delete("/{place_name_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_point_of_interest(place_name_id: int) -> Response:
-    deleted = await poi_repository.delete(place_name_id)
+@router.delete("/{place_name_id}", status_code=status.HTTP_204_NO_CONTENT, summary="Delete a POI")
+async def delete_point_of_interest(
+    place_name_id: int,
+    repository: PointOfInterestRepository = Depends(get_poi_repository),
+) -> Response:
+    deleted = await repository.delete(place_name_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Point of interest not found")
     return Response(status_code=status.HTTP_204_NO_CONTENT)

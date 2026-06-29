@@ -1,7 +1,8 @@
-from app.database import get_collection
+from motor.motor_asyncio import AsyncIOMotorCollection
+
 from app.enums import SortBy, SortOrder
-from app.models import Place, PlaceBoundsResponse, PlaceListResponse, PlaceNearbyResponse, PlaceSpatialItem
 from app.queries import build_bounds_geometry, build_filters, build_sort, merge_query, serialize_place
+from app.schemas.place import Place, PlaceBoundsResponse, PlaceListResponse, PlaceNearbyResponse, PlaceSpatialItem
 
 
 def _serialize_place_spatial(document: dict) -> PlaceSpatialItem:
@@ -10,6 +11,9 @@ def _serialize_place_spatial(document: dict) -> PlaceSpatialItem:
 
 
 class PlaceRepository:
+    def __init__(self, collection: AsyncIOMotorCollection) -> None:
+        self._collection = collection
+
     async def search(
         self,
         *,
@@ -22,7 +26,6 @@ class PlaceRepository:
         skip: int,
         limit: int,
     ) -> PlaceListResponse:
-        collection = get_collection()
         query = build_filters(
             name=name,
             category=category,
@@ -31,8 +34,8 @@ class PlaceRepository:
         )
         sort = build_sort(sort_by, sort_order)
 
-        total = await collection.count_documents(query)
-        cursor = collection.find(query, {"_id": 0}).sort(sort).skip(skip).limit(limit)
+        total = await self._collection.count_documents(query)
+        cursor = self._collection.find(query, {"_id": 0}).sort(sort).skip(skip).limit(limit)
         documents = await cursor.to_list(length=limit)
         items = [serialize_place(document) for document in documents]
 
@@ -46,15 +49,13 @@ class PlaceRepository:
         )
 
     async def get_by_id(self, place_name_id: int) -> Place | None:
-        collection = get_collection()
-        document = await collection.find_one({"placeNameId": place_name_id}, {"_id": 0})
+        document = await self._collection.find_one({"placeNameId": place_name_id}, {"_id": 0})
         if not document:
             return None
         return serialize_place(document)
 
     async def list_categories(self) -> list[str]:
-        collection = get_collection()
-        categories = await collection.distinct("category")
+        categories = await self._collection.distinct("category")
         return sorted(category for category in categories if category)
 
     async def nearby(
@@ -69,7 +70,6 @@ class PlaceRepository:
         skip: int,
         limit: int,
     ) -> PlaceNearbyResponse:
-        collection = get_collection()
         filters = build_filters(name=name, category=category, locality=locality)
 
         geo_near: dict = {
@@ -83,10 +83,10 @@ class PlaceRepository:
         if filters:
             geo_near["$geoNear"]["query"] = filters
 
-        documents = await collection.aggregate(
+        documents = await self._collection.aggregate(
             [geo_near, {"$skip": skip}, {"$limit": limit}, {"$project": {"_id": 0}}]
         ).to_list(length=limit)
-        count_result = await collection.aggregate([geo_near, {"$count": "total"}]).to_list(length=1)
+        count_result = await self._collection.aggregate([geo_near, {"$count": "total"}]).to_list(length=1)
         total = count_result[0]["total"] if count_result else 0
         items = [_serialize_place_spatial(document) for document in documents]
 
@@ -115,15 +115,14 @@ class PlaceRepository:
         skip: int,
         limit: int,
     ) -> PlaceBoundsResponse:
-        collection = get_collection()
         query = merge_query(
             build_filters(name=name, category=category, locality=locality),
             build_bounds_geometry(north=north, south=south, east=east, west=west),
         )
         sort = build_sort(sort_by, sort_order)
 
-        total = await collection.count_documents(query)
-        cursor = collection.find(query, {"_id": 0}).sort(sort).skip(skip).limit(limit)
+        total = await self._collection.count_documents(query)
+        cursor = self._collection.find(query, {"_id": 0}).sort(sort).skip(skip).limit(limit)
         documents = await cursor.to_list(length=limit)
         items = [serialize_place(document) for document in documents]
 
@@ -139,6 +138,3 @@ class PlaceRepository:
             west=west,
             items=items,
         )
-
-
-place_repository = PlaceRepository()

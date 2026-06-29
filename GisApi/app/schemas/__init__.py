@@ -1,5 +1,3 @@
-"""Backward-compatible re-exports. Prefer importing from app.schemas.*."""
-
 from app.schemas.common import Geometry
 from app.schemas.place import (
     CategoryListResponse,

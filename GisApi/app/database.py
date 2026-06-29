@@ -1,22 +1,17 @@
+import logging
+
 from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorCollection
 
-from app.config import get_collection_name, get_db_name, get_mongo_uri
+from app.config import Settings
 
-_client: AsyncIOMotorClient | None = None
-
-
-def get_collection(collection_name: str | None = None) -> AsyncIOMotorCollection:
-    global _client
-
-    if _client is None:
-        _client = AsyncIOMotorClient(get_mongo_uri())
-
-    name = collection_name or get_collection_name()
-    return _client[get_db_name()][name]
+logger = logging.getLogger(__name__)
 
 
-async def close_client() -> None:
-    global _client
-    if _client is not None:
-        _client.close()
-        _client = None
+async def ensure_indexes(client: AsyncIOMotorClient, settings: Settings) -> None:
+    poi_collection = client[settings.db_name][settings.demo_collection_name]
+    await poi_collection.create_index("placeNameId", unique=True, name="uniq_placeNameId")
+    logger.info("Ensured unique index on %s.placeNameId", settings.demo_collection_name)
+
+
+async def ping_database(client: AsyncIOMotorClient) -> None:
+    await client.admin.command("ping")

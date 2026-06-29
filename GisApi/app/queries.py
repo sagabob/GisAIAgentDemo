@@ -2,7 +2,7 @@ import re
 from typing import Any
 
 from app.enums import SortBy, SortOrder
-from app.models import Place
+from app.schemas.place import Place
 
 
 def build_filters(
@@ -18,11 +18,11 @@ def build_filters(
         if exact_name:
             query["placeName"] = {"$regex": f"^{re.escape(name)}$", "$options": "i"}
         else:
-            query["placeName"] = {"$regex": name, "$options": "i"}
+            query["placeName"] = {"$regex": re.escape(name), "$options": "i"}
     if category:
         query["category"] = category
     if locality:
-        query["locality"] = {"$regex": locality, "$options": "i"}
+        query["locality"] = {"$regex": re.escape(locality), "$options": "i"}
 
     return query
 
