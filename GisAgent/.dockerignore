@@ -1,0 +1,16 @@
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.venv/
+venv/
+.env
+.env.*
+!.env.example
+.git/
+.gitignore
+tests/
+*.md
+pyproject.toml
+requirements-dev.txt
+chat.py
