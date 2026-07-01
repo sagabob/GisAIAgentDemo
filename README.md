@@ -1,8 +1,17 @@
 # GisAIAgentDemo
 
-A demo GIS application centred on **GisPortal** — an Angular map UI for Christchurch place data. Users search by name or ask questions in plain English; results appear on an interactive Leaflet map with clickable pins.
+Christchurch place discovery demo: search by name or ask in plain English, then explore results on an interactive map.
 
-**GisApi** (REST + MongoDB) and **GisAgent** (OpenAI tool-calling) exist to power the portal. The portal is the primary deliverable; the backends are supporting services.
+**GisPortal** (Angular + Leaflet) is the main UI. **GisApi** (FastAPI + MongoDB) serves place data. **GisAgent** (FastAPI + OpenAI) powers natural-language search via tool calls into GisApi.
+
+## Live on Azure
+
+| Service | URL |
+|---------|-----|
+| **GisPortal** (map UI) | [https://tdp-gis-portal.happyrock-e7211d98.australiaeast.azurecontainerapps.io/](https://tdp-gis-portal.happyrock-e7211d98.australiaeast.azurecontainerapps.io/) |
+| **GisApi** (place REST API) | [https://tdp-place-api.happyrock-e7211d98.australiaeast.azurecontainerapps.io](https://tdp-place-api.happyrock-e7211d98.australiaeast.azurecontainerapps.io) |
+
+Open the portal link to use the app. The GIS API URL is the backend for name search (`GET /places`) and for the agent’s place lookups.
 
 ---
 
